@@ -1,0 +1,54 @@
+{
+  "name": "@juit/lib-fetch-mock",
+  "version": "1.0.0",
+  "description": "Easy Mocking of Node.js' own `fetch`",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "plug",
+    "coverage": "plug coverage",
+    "dev": "plug coverage -w src -w test",
+    "lint": "plug lint",
+    "test": "plug test",
+    "transpile": "plug transpile"
+  },
+  "author": "Juit Developers <developers@juit.com>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@plugjs/build": "^0.4.6",
+    "typescript": "^5.0.4"
+  },
+  "files": [
+    "*.md",
+    "dist/",
+    "src/"
+  ],
+  "directories": {
+    "test": "test"
+  },
+  "homepage": "https://github.com/juitnow/juit-lib-fetch-mock#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juitnow/juit-lib-fetch-mock.git"
+  },
+  "bugs": {
+    "url": "https://github.com/juitnow/juit-lib-fetch-mock/issues"
+  },
+  "keywords": [
+    "fetch",
+    "mock"
+  ]
+}
