@@ -37,7 +37,31 @@ process.on('exit', () => {
  * FETCH MOCK IMPLEMENTATION                                                  *
  * ========================================================================== */
 
-export class FetchMock {
+export interface FetchMock {
+  /** Handle requests a specific method and path with the specified handler callback */
+  on(method: string, path: string | RegExp, handler: FetchHandler): this
+  /** Handle all requests with the specified handler callback */
+  handle(handler: FetchHandler): this
+  /** Intercept mocked requests with an interceptor */
+  intercept(): () => Promise<DeferredRequest>
+  /** Reset all handlers and interceptors for this instance */
+  reset(): this
+
+  /** Install this instance as the global `fetch` mock handler */
+  install(): this
+  /** Ensure that the mocked `fetch` is restored to its original value */
+  destroy(): void
+}
+
+export interface FetchMockConstructor {
+  /**
+   * Create a new {@link FetchMock} instance, optionally resolving relative
+   * request URLs against the specified _base url_.
+   */
+  new (baseurl?: string | URL | undefined): FetchMock
+}
+
+class FetchMockImpl implements FetchMock {
   private _handlers: FetchHandler[] = []
   private _responses: Response[] = []
   private __fetch?: FetchFunction
@@ -167,6 +191,8 @@ export class FetchMock {
     this._responses = []
   }
 }
+
+export const FetchMock: FetchMockConstructor = FetchMockImpl
 
 /* ========================================================================== *
  * DEFERRED REQUESTS                                                          *
