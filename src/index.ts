@@ -1,6 +1,5 @@
 import { STATUS_CODES } from 'node:http'
 import assert from 'node:assert'
-import hooks from 'node:async_hooks'
 
 const mockSymbol = Symbol.for('juit.fetch.mock')
 
@@ -13,25 +12,17 @@ type FetchHandler = (request: Request, fetch: FetchFunction) => FetchHandlerResu
 
 // This is an interesting bug somewhere: when using _fetch_ a number of times
 // (the real _fetch_), some resources are left open and the testing framework
-// never exits. If we only keep a _hard reference_ to resources (and to the
+// never exits.
+//
+// ON MAC, if we only keep a _hard reference_ to resources (and to the
 // created `Response` objects) until the tests end (see `process.on("exit")`
-// below) then everything exits gracefully... I assume it's due to some
-// aggressive garbage collection, as it only happens with a lot of resources...
-const resources = new Map<number, any>()
-
-const hook = hooks.createHook({
-  init(asyncId, _type, _triger, resource) {
-    resources.set(asyncId, resource)
-  },
-  destroy(asyncId) {
-    resources.delete(asyncId)
-  },
-}).enable()
-
-process.on('exit', () => {
-  hook.disable()
-  resources.clear()
-})
+// below) then everything exits gracefully...
+//
+// ON LINUX, on the other hand, things simply "hang"
+//
+// I don't like the current "process.exit()" solution, but somehow it seems
+// to be the only workable option across platforms...
+process.on('exit', () => process.exit(process.exitCode))
 
 /* ========================================================================== *
  * FETCH MOCK IMPLEMENTATION                                                  *
@@ -63,7 +54,6 @@ export interface FetchMockConstructor {
 
 class FetchMockImpl implements FetchMock {
   private _handlers: FetchHandler[] = []
-  private _responses: Response[] = []
   private _fetch?: FetchFunction
   private _baseurl: URL
 
@@ -84,14 +74,10 @@ class FetchMockImpl implements FetchMock {
     // current async context... If we don't do this, sometimes, the process
     // won't exit waiting for _something_ (dunno what, yet)!
     const realFetch = this._fetch
-    const fetchWrapper = async (
+    const fetchWrapper = (
         info: URL | RequestInfo,
         init?: RequestInit | undefined,
-    ): Promise<Response> => {
-      const response = await realFetch.call(globalThis, info, init)
-      this._responses.push(response)
-      return response
-    }
+    ): Promise<Response> => realFetch.call(globalThis, info, init)
 
     const request = (info instanceof URL) || (typeof info === 'string') ?
         new Request(new URL(info, this._baseurl), init) :
@@ -183,12 +169,6 @@ class FetchMockImpl implements FetchMock {
     const instance = (globalThis as any).fetch[mockSymbol]
     assert(instance === this, 'Attempting to disable non-enabled mock instance')
     globalThis.fetch = this._fetch!
-
-    // consume all response bodies...
-    for (const response of this._responses) {
-      response.text().catch(() => {}) // make sure response body is consumed
-    }
-    this._responses = []
   }
 }
 
