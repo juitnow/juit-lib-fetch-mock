@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http'
 import assert from 'node:assert'
+import hooks from 'node:async_hooks'
 
 const mockSymbol = Symbol.for('juit.fetch.mock')
 
@@ -9,8 +10,36 @@ type FetchArguments = Parameters<FetchFunction>
 type FetchHandlerResult = Response | number | void | null | undefined
 type FetchHandler = (request: Request, fetch: FetchFunction) => FetchHandlerResult | Promise<FetchHandlerResult>
 
+
+// This is an interesting bug somewhere: when using _fetch_ a number of times
+// (the real _fetch_), some resources are left open and the testing framework
+// never exits. If we only keep a _hard reference_ to resources (and to the
+// created `Response` objects) until the tests end (see `process.on("exit")`
+// below) then everything exits gracefully... I assume it's due to some
+// aggressive garbage collection, as it only happens with a lot of resources...
+const resources = new Map<number, any>()
+
+const hook = hooks.createHook({
+  init(asyncId, _type, _triger, resource) {
+    resources.set(asyncId, resource)
+  },
+  destroy(asyncId) {
+    resources.delete(asyncId)
+  },
+}).enable()
+
+process.on('exit', () => {
+  hook.disable()
+  resources.clear()
+})
+
+/* ========================================================================== *
+ * FETCH MOCK IMPLEMENTATION                                                  *
+ * ========================================================================== */
+
 export class FetchMock {
   private _handlers: FetchHandler[] = []
+  private _responses: Response[] = []
   private __fetch?: FetchFunction
   private _baseurl: URL
 
@@ -26,6 +55,20 @@ export class FetchMock {
   ): Promise<Response> {
     assert(this.__fetch, 'Global `fetch` not available (mock not enabled?)')
 
+    // This has to do with async hooks and resources... By wrapping the real
+    // fetch, we create a new promise (a new resource) associated with the
+    // current async context... If we don't do this, sometimes, the process
+    // won't exit waiting for _something_ (dunno what, yet)!
+    const realFetch = this.__fetch
+    const fetchWrapper = async (
+        info: URL | RequestInfo,
+        init?: RequestInit | undefined,
+    ): Promise<Response> => {
+      const response = await realFetch.call(globalThis, info, init)
+      this._responses.push(response)
+      return response
+    }
+
     const request = (info instanceof URL) || (typeof info === 'string') ?
         new Request(new URL(info, this._baseurl), init) :
         new Request(info, init)
@@ -33,7 +76,7 @@ export class FetchMock {
     let response: Response | undefined = undefined
 
     for (const handler of this._handlers) {
-      const result = await handler(request, this.__fetch)
+      const result = await handler(request, fetchWrapper)
       if ((result === undefined) || (result === null)) continue
 
       response = (typeof result === 'number') ? sendStatus(result) : result
@@ -116,6 +159,12 @@ export class FetchMock {
     const instance = (globalThis as any).fetch[mockSymbol]
     assert(instance === this, 'Attempting to disable non-enabled mock instance')
     globalThis.fetch = this.__fetch!
+
+    // consume all response bodies...
+    for (const response of this._responses) {
+      response.text().catch(() => {}) // make sure response body is consumed
+    }
+    this._responses = []
   }
 }
 
@@ -134,13 +183,13 @@ export interface DeferredRequest extends Readonly<Request> {
   readonly fetch: (...args: FetchArguments) => void,
   /** Respond to the `Request` with an optional `Response` (defaults to an empty 200 `Response`) */
   readonly send: (response?: Response | PromiseLike<Response>) => void,
-  /** Respond to the `Request` only with the specified status and an empty body */
+  /** Respond to the `Request` with the specified status and an empty body */
   readonly sendStatus: (status: number) => void,
-  /** Respond to the `Request` only with the specified JSON body and an optional status */
+  /** Respond to the `Request` with the specified JSON body and an optional status */
   readonly sendJson: (json: any, status?: number) => void,
-
+  /** Respond to the `Request` with the specified text body and an optional status */
   readonly sendText: (text: string, status?: number) => void,
-
+  /** Respond to the `Request` with the specified binary body and an optional status */
   readonly sendData: (data: Uint8Array, status?: number) => void,
 }
 
@@ -209,6 +258,7 @@ class DeferredRequestImpl extends Request implements DeferredRequest {
  * EASY RESPONSES                                                             *
  * ========================================================================== */
 
+/** Create a `Response` with the specified status and an empty body */
 export function sendStatus(
     status: number,
     statusText = STATUS_CODES[status],
@@ -216,6 +266,7 @@ export function sendStatus(
   return new Response(undefined, { status, statusText })
 }
 
+/** Create a `Response` with the specified text body and an optional status */
 export function sendText(text: string, status = 200): Response {
   return new Response(text, {
     headers: { 'content-type': 'text/plain; charset=utf-8' },
@@ -224,6 +275,7 @@ export function sendText(text: string, status = 200): Response {
   })
 }
 
+/** Create a `Response` with the specified JSON body and an optional status */
 export function sendJson(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -232,6 +284,7 @@ export function sendJson(data: unknown, status = 200): Response {
   })
 }
 
+/** Create a `Response` with the specified binary body and an optional status */
 export function sendData(data: Uint8Array, status = 200): Response {
   return new Response(data, {
     headers: { 'content-type': 'application/octet-stream' },
