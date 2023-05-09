@@ -64,7 +64,7 @@ export interface FetchMockConstructor {
 class FetchMockImpl implements FetchMock {
   private _handlers: FetchHandler[] = []
   private _responses: Response[] = []
-  private __fetch?: FetchFunction
+  private _fetch?: FetchFunction
   private _baseurl: URL
 
   constructor(baseurl?: string | URL | undefined) {
@@ -73,17 +73,17 @@ class FetchMockImpl implements FetchMock {
 
   /* === FETCH ============================================================== */
 
-  private async _fetch(
+  private async $fetch(
       info: URL | RequestInfo,
       init?: RequestInit | undefined,
   ): Promise<Response> {
-    assert(this.__fetch, 'Global `fetch` not available (mock not enabled?)')
+    assert(this._fetch, 'Global `fetch` not available (mock not enabled?)')
 
     // This has to do with async hooks and resources... By wrapping the real
     // fetch, we create a new promise (a new resource) associated with the
     // current async context... If we don't do this, sometimes, the process
     // won't exit waiting for _something_ (dunno what, yet)!
-    const realFetch = this.__fetch
+    const realFetch = this._fetch
     const fetchWrapper = async (
         info: URL | RequestInfo,
         init?: RequestInit | undefined,
@@ -171,9 +171,9 @@ class FetchMockImpl implements FetchMock {
       assert.fail('Global `fetch` already mocked')
     }
 
-    this.__fetch = globalThis.fetch
+    this._fetch = globalThis.fetch
 
-    globalThis.fetch = this._fetch.bind(this)
+    globalThis.fetch = this.$fetch.bind(this)
     Object.defineProperty(globalThis.fetch, mockSymbol, { value: this })
     return this
   }
@@ -182,7 +182,7 @@ class FetchMockImpl implements FetchMock {
     if (! (mockSymbol in globalThis.fetch)) return
     const instance = (globalThis as any).fetch[mockSymbol]
     assert(instance === this, 'Attempting to disable non-enabled mock instance')
-    globalThis.fetch = this.__fetch!
+    globalThis.fetch = this._fetch!
 
     // consume all response bodies...
     for (const response of this._responses) {

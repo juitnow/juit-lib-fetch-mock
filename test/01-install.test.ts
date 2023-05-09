@@ -15,7 +15,7 @@ describe('Fetch Mock Installation', () => {
     handler.install()
     expect(globalThis.fetch).not.toStrictlyEqual(oldFetch)
 
-    expect(handler).toHaveProperty('__fetch', expect.toStrictlyEqual(oldFetch))
+    expect(handler).toHaveProperty('_fetch', expect.toStrictlyEqual(oldFetch))
 
     handler.destroy()
     expect(globalThis.fetch).toStrictlyEqual(oldFetch)
