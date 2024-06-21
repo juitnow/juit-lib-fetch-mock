@@ -1,6 +1,6 @@
 {
   "name": "@juit/lib-fetch-mock",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Easy Mocking of Node.js' own `fetch`",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -28,8 +28,8 @@
   "author": "Juit Developers <developers@juit.com>",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@plugjs/build": "^0.4.7",
-    "typescript": "^5.0.4"
+    "@plugjs/build": "^0.6.0",
+    "typescript": "^5.5.2"
   },
   "files": [
     "*.md",
