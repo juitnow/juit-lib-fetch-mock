@@ -1,5 +1,5 @@
-import { STATUS_CODES } from 'node:http'
 import assert from 'node:assert'
+import { STATUS_CODES } from 'node:http'
 
 const mockSymbol = Symbol.for('juit.fetch.mock')
 
@@ -80,8 +80,8 @@ class FetchMockImpl implements FetchMock {
     ): Promise<Response> => realFetch.call(globalThis, info, init)
 
     const request = (info instanceof URL) || (typeof info === 'string') ?
-        new Request(new URL(info, this._baseurl), init) :
-        new Request(info, init)
+      new Request(new URL(info, this._baseurl), init) :
+      new Request(info, init)
 
     let response: Response | undefined = undefined
 
@@ -292,7 +292,7 @@ export function sendJson(data: unknown, status = 200): Response {
 
 /** Create a `Response` with the specified binary body and an optional status */
 export function sendData(data: Uint8Array, status = 200): Response {
-  return new Response(data, {
+  return new Response(Buffer.from(data), {
     headers: { 'content-type': 'application/octet-stream' },
     statusText: STATUS_CODES[status],
     status,
