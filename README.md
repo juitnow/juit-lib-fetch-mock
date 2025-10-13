@@ -5,6 +5,7 @@ This package allows to quicly mock the global `fetch` distributed with Node 18
 (and greater).
 
 * [Request Handlers](#request-handlers)
+* [Wrapping Mocks](#wrapping-mocks)
 * [Request Interception](#request-interception)
 * [License](LICENSE.md)
 * [Copyright](NOTICE.md)
@@ -53,6 +54,33 @@ a _real_ `fetch` method, allowing to interact with the network.
 
 The functions `sendStatus(...)`, `sendJson(...)`, `sendText(...)` and
 `sendData(...)` can be used to generate simple responses for mocking.
+
+
+### Wrapping Mocks
+
+Mock instances can be wrapped to support in testing. For example:
+
+```ts
+const handler1 = new FetchMock()
+handler1.on('GET', '/foo', (_) => new Response('FOO'))
+handler1.on('GET', '/baz', (_) => new Response('FOO'))
+
+const handler2 = new FetchMock()
+handler2.on('GET', '/foo', (_) => new Response('Another FOO'))
+handler2.on('GET', '/bar', (_) => new Response('BAR'))
+
+handler1.install()
+handler2.install() // this will be the _top most_ as it's installed later
+```
+
+The last installed `FetchMock` instance will be the _top-most_ capturing all
+requests and forwarding requests to sub-mocks only when not matched.
+
+In the example above:
+
+* requests for `/foo` will be intercepted by `handler2` and _not_ forwarded to `handler1`
+* requests for `/bar` will be handled locally
+* requests for `/baz` will simply be forwarded to `handler1`
 
 
 ### Request Interception
