@@ -43,11 +43,11 @@ describe('Multiple Fetch Mock Installation', () => {
     const handler1 = new FetchMock()
     const handler2 = new FetchMock()
 
-    handler1.on('GET', '/foo', (_) => new Response('FOO'))
-    handler1.on('GET', '/baz', (_) => new Response('BAZ'))
+    handler1.on('GET', '/foo', () => new Response('FOO'))
+    handler1.on('GET', '/baz', () => new Response('BAZ'))
 
-    handler2.on('GET', '/foo', (_) => new Response('OVERRIDE FOO'))
-    handler2.on('GET', '/bar', (_) => new Response('BAR'))
+    handler2.on('GET', '/foo', () => new Response('OVERRIDE FOO'))
+    handler2.on('GET', '/bar', () => new Response('BAR'))
 
     handler1.install()
     handler2.install()
@@ -63,5 +63,36 @@ describe('Multiple Fetch Mock Installation', () => {
     await expect(fetch('/bar').then((r) => r.status)).toBeResolvedWith(404)
     await expect(fetch('/baz').then((r) => r.text())).toBeResolvedWith('BAZ')
     await expect(fetch('/abc').then((r) => r.status)).toBeResolvedWith(404)
+  })
+
+  it('should intercept requests without affecting others', async () => {
+    const handler1 = new FetchMock()
+    const handler2 = new FetchMock()
+    const handler3 = new FetchMock()
+
+    handler1.on('POST', '/foo', async (request) => {
+      log('Consuming request ( 1)', await request.text())
+      return new Response('FOO')
+    })
+    handler2.on('POST', '/foo', async (request) => {
+      log('Consuming request (2A)', await request.text())
+    })
+    handler2.on('POST', '/foo', async (request) => {
+      log('Consuming request (2B)', await request.text())
+    })
+    handler3.on('POST', '/foo', async (request) => {
+      log('Consuming request (3A)', await request.text())
+    })
+    handler3.on('POST', '/foo', async (request) => {
+      log('Consuming request (3B)', await request.text())
+    })
+
+    handler1.install()
+    handler2.install()
+    handler3.install()
+
+    const response = await fetch('/foo', { method: 'POST', body: 'Hello' })
+    expect(response.status).toEqual(200)
+    expect(await response.text()).toEqual('FOO')
   })
 })

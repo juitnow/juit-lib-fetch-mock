@@ -80,13 +80,13 @@ class FetchMockImpl implements FetchMock {
         init?: RequestInit | undefined,
     ): Promise<Response> => realFetch.call(globalThis, info, init)
 
-    const request = (info instanceof URL) || (typeof info === 'string') ?
-      new Request(new URL(info, this._baseurl), init) :
-      new Request(info, init)
-
     let response: Response | undefined = undefined
 
     for (const handler of this._handlers) {
+      const request = (info instanceof URL) || (typeof info === 'string') ?
+        new Request(new URL(info, this._baseurl), init) :
+        new Request(info.clone(), init)
+
       const result = await handler(request, fetchWrapper)
       if ((result === undefined) || (result === null)) continue
 
