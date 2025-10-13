@@ -38,4 +38,30 @@ describe('Multiple Fetch Mock Installation', () => {
     await expect(fetch('/baz').then((r) => r.status)).toBeResolvedWith(404)
     await expect(fetch('/abc').then((r) => r.status)).toBeResolvedWith(404)
   })
+
+  it('should intercept mock requests before forwarding to wrapped mocks', async () => {
+    const handler1 = new FetchMock()
+    const handler2 = new FetchMock()
+
+    handler1.on('GET', '/foo', (_) => new Response('FOO'))
+    handler1.on('GET', '/baz', (_) => new Response('BAZ'))
+
+    handler2.on('GET', '/foo', (_) => new Response('OVERRIDE FOO'))
+    handler2.on('GET', '/bar', (_) => new Response('BAR'))
+
+    handler1.install()
+    handler2.install()
+
+    await expect(fetch('/foo').then((r) => r.text())).toBeResolvedWith('OVERRIDE FOO')
+    await expect(fetch('/bar').then((r) => r.text())).toBeResolvedWith('BAR')
+    await expect(fetch('/baz').then((r) => r.text())).toBeResolvedWith('BAZ')
+    await expect(fetch('/abc').then((r) => r.status)).toBeResolvedWith(404)
+
+    handler2.destroy()
+
+    await expect(fetch('/foo').then((r) => r.text())).toBeResolvedWith('FOO')
+    await expect(fetch('/bar').then((r) => r.status)).toBeResolvedWith(404)
+    await expect(fetch('/baz').then((r) => r.text())).toBeResolvedWith('BAZ')
+    await expect(fetch('/abc').then((r) => r.status)).toBeResolvedWith(404)
+  })
 })
