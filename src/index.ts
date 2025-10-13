@@ -5,6 +5,7 @@ const mockSymbol = Symbol.for('juit.fetch.mock')
 
 type FetchFunction = typeof globalThis.fetch
 type FetchArguments = Parameters<FetchFunction>
+type MaybeMockedFetchFunction = FetchFunction & { [mockSymbol]?: FetchMockImpl }
 
 type FetchHandlerResult = Response | number | void | null | undefined
 type FetchHandler = (request: Request, fetch: FetchFunction) => FetchHandlerResult | Promise<FetchHandlerResult>
@@ -54,7 +55,7 @@ export interface FetchMockConstructor {
 
 class FetchMockImpl implements FetchMock {
   private _handlers: FetchHandler[] = []
-  private _fetch?: FetchFunction
+  private _fetch?: MaybeMockedFetchFunction
   private _baseurl: URL
 
   constructor(baseurl?: string | URL | undefined) {
@@ -93,7 +94,16 @@ class FetchMockImpl implements FetchMock {
       break
     }
 
-    return response || sendStatus(404)
+    // If we have a response from this mock, return it
+    if (response) return response
+
+    // If we are wrapping another mock, call it
+    if (this._fetch[mockSymbol]) {
+      return this._fetch[mockSymbol].$fetch(info, init)
+    }
+
+    // Otherwise, return not found (404)
+    return sendStatus(404)
   }
 
   /* === HANDLERS =========================================================== */
@@ -152,23 +162,55 @@ class FetchMockImpl implements FetchMock {
   /* === INSTALL / DESTROY ================================================== */
 
   install(): this {
+    // Ignore this if we are already installed at the root of the mock chain
     if (mockSymbol in globalThis.fetch) {
       if ((globalThis as any).fetch[mockSymbol] === this) return this
-      assert.fail('Global `fetch` already mocked')
     }
 
+    // If we are already installed somewhere in the mock chain, fail
+    let fn: MaybeMockedFetchFunction | undefined = globalThis.fetch
+    while (fn && fn[mockSymbol]) {
+      if (fn[mockSymbol] === this) {
+        throw new Error('Global `fetch` already mocked by this instance')
+      } else {
+        fn = fn[mockSymbol]._fetch
+      }
+    }
+
+    // Save the current fetch (either the real one, or another mock)
     this._fetch = globalThis.fetch
 
+    // Install our fetch handler
     globalThis.fetch = this.$fetch.bind(this)
     Object.defineProperty(globalThis.fetch, mockSymbol, { value: this })
     return this
   }
 
   destroy(): void {
+    // If we're not mocked *globally*, just return
     if (! (mockSymbol in globalThis.fetch)) return
-    const instance = (globalThis as any).fetch[mockSymbol]
-    assert(instance === this, 'Attempting to disable non-enabled mock instance')
-    globalThis.fetch = this._fetch!
+
+    // If we have never been installed, do nothing
+    if (! this._fetch) return
+
+    // Start looking into our chain of mocks
+    let parent: FetchMockImpl | undefined = undefined
+    let fn = globalThis.fetch as MaybeMockedFetchFunction
+
+    // Walk the chain of mocks until we find ourselves
+    while (fn[mockSymbol]) {
+      if (fn[mockSymbol] === this) {
+        if (! parent) globalThis.fetch = this._fetch
+        else parent._fetch = this._fetch
+        break
+      } else {
+        parent = fn[mockSymbol]
+        fn = fn[mockSymbol]._fetch as MaybeMockedFetchFunction
+      }
+    }
+
+    // Forget our saved fetch
+    this._fetch = undefined
   }
 }
 
