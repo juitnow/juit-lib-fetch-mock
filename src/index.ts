@@ -83,9 +83,14 @@ class FetchMockImpl implements FetchMock {
     let response: Response | undefined = undefined
 
     for (const handler of this._handlers) {
+      // This is another interesting bug: when using "info.clone()" (before we
+      // were doing "new Request(info.clone(), init)", _sometimes_ abort
+      // handlers are not properly propagated down the chain... Dunno why, but
+      // it seems that creating a new Request using info as init, fixes it.
+      // Obviously in this case we drop "init", and that might haunt us later...
       const request = (info instanceof URL) || (typeof info === 'string') ?
         new Request(new URL(info, this._baseurl), init) :
-        new Request(info.clone(), init)
+        new Request(info.url, info)
 
       const result = await handler(request, fetchWrapper)
       if ((result === undefined) || (result === null)) continue
